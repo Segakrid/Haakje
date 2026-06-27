@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 -- Fish Species table (predefined)
 CREATE TABLE IF NOT EXISTS fish_species (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,
   scientific_name TEXT,
   description TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS fish_species (
 -- Bait Types table (predefined)
 CREATE TABLE IF NOT EXISTS bait_types (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,
   description TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS catches (
 );
 
 -- Insert some default fish species
+-- Gebruik ON CONFLICT (name) DO NOTHING om dubbelen te voorkomen
 INSERT INTO fish_species (name, scientific_name, description) VALUES
 ('Snoekbaars', 'Sander lucioperca', 'Roofdier, leeft in zoet water'),
 ('Baars', 'Perca fluviatilis', 'Veelvoorkomende roofvis in Nederland'),
