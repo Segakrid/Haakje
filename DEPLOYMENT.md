@@ -39,10 +39,10 @@ Dit creëert in één keer:
 - Een trigger (`on_auth_user_created`) die automatisch een `profiles`-rij
   aanmaakt zodra iemand registreert
 
-> Tabellen, seed-data en de bucket gebruiken `IF NOT EXISTS` / `ON CONFLICT`.
-> De `CREATE POLICY`-statements zijn bedoeld voor een schone database; bij
-> opnieuw draaien op een bestaand project geven die "already exists"-fouten —
-> verwijder dan eerst de bestaande policies of draai alleen de gewijzigde delen.
+> Het script is idempotent: tabellen, seed-data en de bucket gebruiken
+> `IF NOT EXISTS` / `ON CONFLICT`, en elke policy/trigger wordt voorafgegaan
+> door `DROP ... IF EXISTS`. Je kunt het dus veilig opnieuw draaien op een
+> bestaand project.
 
 ## Stap 3 — Auth configureren
 
