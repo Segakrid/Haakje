@@ -3,11 +3,18 @@ import { createBrowserClient } from '@supabase/ssr'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error(
-    'Supabase environment variables ontbreken. Stel NEXT_PUBLIC_SUPABASE_URL en ' +
-      'NEXT_PUBLIC_SUPABASE_ANON_KEY in (zie .env.example).'
+// We laten de build (static prerender) niet crashen op ontbrekende env-vars,
+// maar maken het wel duidelijk zichtbaar in de browser. De app werkt pas echt
+// zodra NEXT_PUBLIC_SUPABASE_URL en NEXT_PUBLIC_SUPABASE_ANON_KEY zijn ingesteld
+// (zie .env.example en DEPLOYMENT.md).
+if ((!supabaseUrl || !supabaseKey) && typeof window !== 'undefined') {
+  console.error(
+    'Supabase environment variabelen ontbreken: NEXT_PUBLIC_SUPABASE_URL en/of ' +
+      'NEXT_PUBLIC_SUPABASE_ANON_KEY. Stel deze in (zie .env.example / DEPLOYMENT.md).'
   )
 }
 
-export const supabase = createBrowserClient(supabaseUrl, supabaseKey)
+export const supabase = createBrowserClient(
+  supabaseUrl ?? 'https://placeholder.supabase.co',
+  supabaseKey ?? 'placeholder-anon-key'
+)
