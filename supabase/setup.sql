@@ -121,8 +121,32 @@ ALTER TABLE catches ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view their own profile" ON profiles
   FOR SELECT USING (auth.uid() = id);
 
+CREATE POLICY "Users can insert their own profile" ON profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
 CREATE POLICY "Users can update their own profile" ON profiles
   FOR UPDATE USING (auth.uid() = id);
+
+-- Automatically create a profile row when a new user signs up.
+-- The "name" comes from the metadata passed in supabase.auth.signUp({ options: { data: { name } } }).
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, name, email)
+  VALUES (NEW.id, NEW.raw_user_meta_data ->> 'name', NEW.email)
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Policies for fishing_rods
 CREATE POLICY "Users can view their own fishing rods" ON fishing_rods
@@ -160,7 +184,27 @@ CREATE POLICY "Anyone can view fish species" ON fish_species
 CREATE POLICY "Anyone can view bait types" ON bait_types
   FOR SELECT USING (true);
 
--- Storage for images
--- Create a bucket for catch images (this is done in the Supabase dashboard)
--- Bucket name: catch_images
--- Enable public access for the bucket
+-- Storage for catch images
+-- Create a public bucket so getPublicUrl() works for displaying images.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('catch_images', 'catch_images', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Anyone can read images (bucket is public).
+CREATE POLICY "Public can read catch images" ON storage.objects
+  FOR SELECT USING (bucket_id = 'catch_images');
+
+-- Only authenticated users can upload to the catch_images bucket.
+CREATE POLICY "Authenticated users can upload catch images" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'catch_images');
+
+-- Authenticated users can update objects in the catch_images bucket.
+CREATE POLICY "Authenticated users can update catch images" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (bucket_id = 'catch_images');
+
+-- Authenticated users can delete objects in the catch_images bucket.
+CREATE POLICY "Authenticated users can delete catch images" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (bucket_id = 'catch_images');

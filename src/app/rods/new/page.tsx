@@ -31,7 +31,15 @@ export default function NewRodPage() {
     if (!user?.id) return
     
     try {
-      const result = await addRod(data)
+      const result = await addRod({
+        name: data.name,
+        brand: data.brand,
+        model: data.model,
+        length: data.length ?? null,
+        weight: data.weight ?? null,
+        material: data.material ?? null,
+        description: data.description ?? null,
+      })
       if (result) {
         router.push('/rods')
       }

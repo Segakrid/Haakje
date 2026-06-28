@@ -89,7 +89,15 @@ export default function NewCatchPage() {
     setIsSubmitting(true)
     try {
       const result = await addCatch({
-        ...data,
+        fish_species_id: data.fish_species_id,
+        bait_type_id: data.bait_type_id,
+        fishing_rod_id: data.fishing_rod_id || null,
+        weight_kg: data.weight_kg ?? null,
+        length_cm: data.length_cm ?? null,
+        location: data.location,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+        notes: data.notes ?? null,
         images: images.length > 0 ? images : null,
       })
       

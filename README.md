@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Haakje 🎣
 
-## Getting Started
+Haakje is een webapp om je visvangsten bij te houden: registreer vangsten met
+soort, aas, gewicht, lengte, locatie en foto's, beheer je hengels en bekijk
+statistieken over je prestaties.
 
-First, run the development server:
+Gebouwd met **Next.js 16** (App Router), **React 19**, **Tailwind CSS 4** en
+**Supabase** (auth, Postgres database en storage).
+
+## Lokaal ontwikkelen
+
+### 1. Vereisten
+
+- Node.js 20+
+- Een Supabase project (gratis tier volstaat)
+
+### 2. Installeren
+
+```bash
+npm install
+```
+
+### 3. Environment variabelen
+
+Kopieer `.env.example` naar `.env.local` en vul je Supabase gegevens in
+(Supabase dashboard → Settings → API):
+
+```bash
+cp .env.example .env.local
+```
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+```
+
+### 4. Database opzetten
+
+Voer `supabase/setup.sql` uit in de **SQL Editor** van je Supabase project.
+Dit script maakt alle tabellen, indexen, Row Level Security policies, de
+`catch_images` storage bucket en een trigger die automatisch een profiel
+aanmaakt bij registratie.
+
+### 5. Starten
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Script          | Beschrijving               |
+| --------------- | -------------------------- |
+| `npm run dev`   | Start de ontwikkelserver   |
+| `npm run build` | Maakt een productie-build  |
+| `npm run start` | Start de productie-build   |
+| `npm run lint`  | Voert ESLint uit           |
 
-## Learn More
+## Deployen
 
-To learn more about Next.js, take a look at the following resources:
+Zie [`DEPLOYMENT.md`](./DEPLOYMENT.md) voor een stap-voor-stap handleiding om
+de app online te zetten met Vercel en Supabase.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Projectstructuur
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/
+  app/          App Router pagina's (catches, rods, stats, login, register)
+  components/   Herbruikbare UI componenten + auth guards
+  hooks/        Data hooks (useAuth, useCatches, useFishingRods, ...)
+  lib/          Supabase client, API laag, validaties (zod), utils
+  types/        TypeScript types voor de database
+supabase/
+  setup.sql     Volledig databaseschema + RLS + storage setup
+```
