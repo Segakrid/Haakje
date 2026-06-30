@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Catch, CatchInput, SortBy, SortOrder } from '@/types/database'
-import { getCatches, createCatch, updateCatch, deleteCatch } from '@/lib/api'
+import { getCatches, createCatch, updateCatch, deleteCatch, CatchUpdateInput } from '@/lib/api'
 import { sortCatches, filterBySpecies, filterByLocation, filterByDateRange } from '@/lib/utils'
 
 export const useCatches = (userId: string | null) => {
@@ -56,11 +56,16 @@ export const useCatches = (userId: string | null) => {
     }
   }, [userId])
 
-  const editCatch = useCallback(async (id: string, input: Partial<CatchInput>) => {
+  const editCatch = useCallback(async (id: string, input: CatchUpdateInput) => {
+    if (!userId) {
+      setError('User not authenticated')
+      return null
+    }
+
     setLoading(true)
     setError(null)
     try {
-      const updatedCatch = await updateCatch(id, input)
+      const updatedCatch = await updateCatch(id, userId, input)
       setCatches(prev => prev.map(c => c.id === id ? updatedCatch : c))
       return updatedCatch
     } catch (err) {
@@ -69,7 +74,7 @@ export const useCatches = (userId: string | null) => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [userId])
 
   const removeCatch = useCallback(async (id: string) => {
     setLoading(true)

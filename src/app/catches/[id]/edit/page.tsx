@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { catchSchema, type CatchFormData } from '@/lib/validations'
@@ -9,22 +9,28 @@ import { useAuth } from '@/hooks/useAuth'
 import { useCatches } from '@/hooks/useCatches'
 import { useReferenceData } from '@/hooks/useReferenceData'
 import { useFishingRods } from '@/hooks/useFishingRods'
+import { getCatch } from '@/lib/api'
 import { Fish, Camera, MapPin, Weight, Ruler, Type, Worm, FishingRod as FishingRodIcon, ArrowLeft, Loader2 } from 'lucide-react'
 import { AuthGuard } from '@/components/AuthGuard'
 
-export default function NewCatchPage() {
+export default function EditCatchPage() {
   const router = useRouter()
+  const params = useParams<{ id: string }>()
+  const catchId = params.id
+
   const { user } = useAuth()
-  const { addCatch } = useCatches(user?.id || null)
+  const { editCatch } = useCatches(user?.id || null)
   const { fishSpecies, baitTypes, loading: refLoading } = useReferenceData()
   const { rods, loading: rodsLoading } = useFishingRods(user?.id || null)
-  
-  const [images, setImages] = useState<File[]>([])
-  const [imagePreviews, setImagePreviews] = useState<string[]>([])
-  const [usingCurrentLocation, setUsingCurrentLocation] = useState(false)
+
+  const [existingImages, setExistingImages] = useState<string[]>([])
+  const [newImages, setNewImages] = useState<File[]>([])
+  const [newPreviews, setNewPreviews] = useState<string[]>([])
+  const [loadingCatch, setLoadingCatch] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<CatchFormData>({
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<CatchFormData>({
     resolver: zodResolver(catchSchema),
     defaultValues: {
       fish_species_id: '',
@@ -40,55 +46,66 @@ export default function NewCatchPage() {
     },
   })
 
-  // Get current location
+  // Load the existing catch and prefill the form.
   useEffect(() => {
-    if (usingCurrentLocation && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setValue('latitude', position.coords.latitude)
-          setValue('longitude', position.coords.longitude)
-          // Reverse geocode to get location name (simplified)
-          setValue('location', `Lat: ${position.coords.latitude.toFixed(4)}, Lng: ${position.coords.longitude.toFixed(4)}`)
-        },
-        (error) => {
-          console.error('Error getting location:', error)
-          setUsingCurrentLocation(false)
+    let active = true
+    const load = async () => {
+      try {
+        const data = await getCatch(catchId)
+        if (!active) return
+        if (!data) {
+          setLoadError('Vangst niet gevonden')
+          return
         }
-      )
+        reset({
+          fish_species_id: data.fish_species_id || '',
+          bait_type_id: data.bait_type_id || '',
+          fishing_rod_id: data.fishing_rod_id,
+          weight_kg: data.weight_kg,
+          length_cm: data.length_cm,
+          location: data.location,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          notes: data.notes,
+          images: null,
+        })
+        setExistingImages(data.images || [])
+      } catch {
+        if (active) setLoadError('Kon de vangst niet laden')
+      } finally {
+        if (active) setLoadingCatch(false)
+      }
     }
-  }, [usingCurrentLocation, setValue])
+    load()
+    return () => {
+      active = false
+    }
+  }, [catchId, reset])
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const newImages = Array.from(e.target.files)
-      setImages(prev => [...prev, ...newImages])
-      
-      // Create previews
-      const newPreviews = newImages.map(file => URL.createObjectURL(file))
-      setImagePreviews(prev => [...prev, ...newPreviews])
+      const files = Array.from(e.target.files)
+      setNewImages(prev => [...prev, ...files])
+      setNewPreviews(prev => [...prev, ...files.map(file => URL.createObjectURL(file))])
     }
   }
 
-  const removeImage = (index: number) => {
-    const newImages = [...images]
-    const newPreviews = [...imagePreviews]
-    
-    newImages.splice(index, 1)
-    newPreviews.splice(index, 1)
-    
-    setImages(newImages)
-    setImagePreviews(newPreviews)
-    
-    // Revoke object URL to free memory
-    URL.revokeObjectURL(imagePreviews[index])
+  const removeExistingImage = (index: number) => {
+    setExistingImages(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const removeNewImage = (index: number) => {
+    URL.revokeObjectURL(newPreviews[index])
+    setNewImages(prev => prev.filter((_, i) => i !== index))
+    setNewPreviews(prev => prev.filter((_, i) => i !== index))
   }
 
   const onSubmit = async (data: CatchFormData) => {
     if (!user?.id) return
-    
+
     setIsSubmitting(true)
     try {
-      const result = await addCatch({
+      const result = await editCatch(catchId, {
         fish_species_id: data.fish_species_id,
         bait_type_id: data.bait_type_id,
         fishing_rod_id: data.fishing_rod_id || null,
@@ -98,31 +115,47 @@ export default function NewCatchPage() {
         latitude: data.latitude ?? null,
         longitude: data.longitude ?? null,
         notes: data.notes ?? null,
-        images: images.length > 0 ? images : null,
+        images: [...existingImages, ...newImages],
       })
-      
+
       if (result) {
         router.push('/catches')
       }
     } catch (err) {
-      console.error('Failed to create catch:', err)
+      console.error('Failed to update catch:', err)
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // Clean up image previews on unmount
+  // Clean up object URLs on unmount.
   useEffect(() => {
     return () => {
-      imagePreviews.forEach(url => URL.revokeObjectURL(url))
+      newPreviews.forEach(url => URL.revokeObjectURL(url))
     }
-  }, [imagePreviews])
+  }, [newPreviews])
 
-  if (refLoading || rodsLoading) {
+  if (refLoading || rodsLoading || loadingCatch) {
     return (
       <AuthGuard>
         <div className="min-h-screen flex items-center justify-center">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        </div>
+      </AuthGuard>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <AuthGuard>
+        <div className="space-y-4 text-center py-12">
+          <p className="text-red-600">{loadError}</p>
+          <button
+            onClick={() => router.push('/catches')}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors"
+          >
+            Terug naar vangsten
+          </button>
         </div>
       </AuthGuard>
     )
@@ -140,8 +173,8 @@ export default function NewCatchPage() {
             <ArrowLeft className="w-6 h-6" />
           </button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Nieuwe Vangst</h1>
-            <p className="text-gray-600">Voer de details van je vangst in</p>
+            <h1 className="text-3xl font-bold text-gray-800">Vangst Bewerken</h1>
+            <p className="text-gray-600">Pas de details van je vangst aan</p>
           </div>
         </div>
 
@@ -152,7 +185,37 @@ export default function NewCatchPage() {
               <Camera className="w-4 h-4 inline mr-2" />
               Afbeeldingen
             </label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+              {(existingImages.length > 0 || newPreviews.length > 0) && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  {existingImages.map((url, index) => (
+                    <div key={`existing-${index}`} className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Vangst ${index + 1}`} className="w-full h-24 object-cover rounded-md" />
+                      <button
+                        type="button"
+                        onClick={() => removeExistingImage(index)}
+                        className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-sm"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {newPreviews.map((preview, index) => (
+                    <div key={`new-${index}`} className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={preview} alt={`Nieuw ${index + 1}`} className="w-full h-24 object-cover rounded-md" />
+                      <button
+                        type="button"
+                        onClick={() => removeNewImage(index)}
+                        className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-sm"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <input
                 type="file"
                 accept="image/*"
@@ -161,43 +224,10 @@ export default function NewCatchPage() {
                 className="hidden"
                 id="image-upload"
               />
-              <label htmlFor="image-upload" className="cursor-pointer">
-                {imagePreviews.length === 0 ? (
-                  <>
-                    <Camera className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-600">
-                      Klik om afbeeldingen toe te voegen of sleep ze hierheen
-                    </p>
-                  </>
-                ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {imagePreviews.map((preview, index) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={preview}
-                          alt={`Vangst ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-md"
-                        />
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            removeImage(index)
-                          }}
-                          className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-sm"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <label htmlFor="image-upload" className="cursor-pointer block text-center">
+                <Camera className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                <p className="text-gray-600">Klik om afbeeldingen toe te voegen</p>
               </label>
-              {imagePreviews.length > 0 && (
-                <p className="text-sm text-gray-500 mt-2">
-                  {imagePreviews.length} afbeelding(en) geselecteerd
-                </p>
-              )}
             </div>
           </div>
 
@@ -309,32 +339,15 @@ export default function NewCatchPage() {
               <MapPin className="w-4 h-4 inline mr-2" />
               Locatie *
             </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Voer locatie in..."
-                {...register('location')}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <button
-                type="button"
-                onClick={() => setUsingCurrentLocation(!usingCurrentLocation)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  usingCurrentLocation
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {usingCurrentLocation ? 'Locatie gevonden' : 'Gebruik huidige locatie'}
-              </button>
-            </div>
+            <input
+              type="text"
+              placeholder="Voer locatie in..."
+              {...register('location')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
             {errors.location && (
               <p className="mt-1 text-sm text-red-600">{errors.location.message}</p>
             )}
-            
-            {/* Hidden latitude and longitude fields */}
-            <input type="hidden" {...register('latitude', { valueAsNumber: true })} />
-            <input type="hidden" {...register('longitude', { valueAsNumber: true })} />
           </div>
 
           {/* Notes */}
@@ -371,7 +384,7 @@ export default function NewCatchPage() {
                   Opslaan...
                 </>
               ) : (
-                'Opslaan'
+                'Wijzigingen opslaan'
               )}
             </button>
           </div>
