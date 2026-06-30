@@ -208,20 +208,35 @@ DROP POLICY IF EXISTS "Public can read catch images" ON storage.objects;
 CREATE POLICY "Public can read catch images" ON storage.objects
   FOR SELECT USING (bucket_id = 'catch_images');
 
--- Only authenticated users can upload to the catch_images bucket.
+-- Users can only upload into their OWN folder. Images are stored under a path
+-- that starts with the user's id, e.g. "<uid>/<filename>". (storage.foldername
+-- returns the path segments, so [1] is the first folder = the owner's uid.)
 DROP POLICY IF EXISTS "Authenticated users can upload catch images" ON storage.objects;
 CREATE POLICY "Authenticated users can upload catch images" ON storage.objects
   FOR INSERT TO authenticated
-  WITH CHECK (bucket_id = 'catch_images');
+  WITH CHECK (
+    bucket_id = 'catch_images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
 
--- Authenticated users can update objects in the catch_images bucket.
+-- Users can only update objects inside their own folder.
 DROP POLICY IF EXISTS "Authenticated users can update catch images" ON storage.objects;
 CREATE POLICY "Authenticated users can update catch images" ON storage.objects
   FOR UPDATE TO authenticated
-  USING (bucket_id = 'catch_images');
+  USING (
+    bucket_id = 'catch_images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'catch_images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
 
--- Authenticated users can delete objects in the catch_images bucket.
+-- Users can only delete objects inside their own folder.
 DROP POLICY IF EXISTS "Authenticated users can delete catch images" ON storage.objects;
 CREATE POLICY "Authenticated users can delete catch images" ON storage.objects
   FOR DELETE TO authenticated
-  USING (bucket_id = 'catch_images');
+  USING (
+    bucket_id = 'catch_images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );

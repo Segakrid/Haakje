@@ -100,14 +100,23 @@ Deze keys zijn bedoeld om publiek te zijn; de beveiliging zit in RLS.
 - [ ] Registreren maakt een rij aan in `profiles`
 - [ ] Een geüploade foto is zichtbaar op de vangst-kaart
 
+## Beveiliging
+
+- **Storage is per gebruiker afgeschermd.** Foto's worden opgeslagen onder een
+  pad dat begint met de user-id (`<uid>/<bestand>`). De RLS-policies op
+  `storage.objects` staan uploaden/wijzigen/verwijderen alleen toe binnen de
+  eigen map; lezen is publiek (de bucket toont publieke afbeeldingen).
+- **Rij-niveau toegang.** Alle datatabellen hebben RLS: een gebruiker ziet en
+  beheert uitsluitend zijn eigen hengels en vangsten.
+
 ## Bekende aandachtspunten / vervolgstappen
 
 - **Auth is client-side.** Sessies worden in de browser beheerd via
   `@supabase/ssr` (`createBrowserClient`). Voor server-side rendering van
   beveiligde pagina's of betere sessie-refresh is een Next.js `middleware.ts`
   met de Supabase server client een logische vervolgstap.
-- **Vangst bewerken** (`/catches/[id]/edit`) wordt vanuit de UI gelinkt maar
-  bestaat nog niet als route — toe te voegen of de link te verbergen.
 - **Afbeeldingen** worden met een gewone `<img>` getoond. Overstappen op
   `next/image` (met `remotePatterns` voor de Supabase storage-host) levert
   betere performance en caching op.
+- **E-mailbevestiging** staat tijdens een snelle start vaak uit; zet deze aan
+  voor productie (Authentication → Email).

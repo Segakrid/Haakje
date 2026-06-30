@@ -157,18 +157,19 @@ export const createCatch = async (userId: string, input: CatchInput): Promise<Ca
   if (input.images && input.images.length > 0) {
     for (const image of input.images) {
       const fileName = generateFileName(image.name, userId)
-      const { data: uploadData, error: uploadError } = await supabase
+      const path = `${userId}/${fileName}`
+      const { error: uploadError } = await supabase
         .storage
         .from('catch_images')
-        .upload(`user_${userId}/${fileName}`, image)
-      
+        .upload(path, image)
+
       if (uploadError) throw uploadError
-      
+
       const { data: urlData } = supabase
         .storage
         .from('catch_images')
-        .getPublicUrl(`user_${userId}/${fileName}`)
-      
+        .getPublicUrl(path)
+
       if (urlData.publicUrl) {
         imageUrls.push(urlData.publicUrl)
       }
@@ -204,36 +205,54 @@ export const createCatch = async (userId: string, input: CatchInput): Promise<Ca
   return data
 }
 
-export const updateCatch = async (id: string, input: Partial<CatchInput>): Promise<Catch> => {
-  // Handle image updates
-  let imageUrls = input.images as string[] | undefined
-  
-  if (input.images && input.images.length > 0 && typeof input.images[0] !== 'string') {
-    // New images to upload
-    const newImageUrls: string[] = []
-    
-    for (const image of input.images as File[]) {
-      const fileName = generateFileName(image.name, id)
-      const { data: uploadData, error: uploadError } = await supabase
-        .storage
-        .from('catch_images')
-        .upload(`catch_${id}/${fileName}`, image)
-      
-      if (uploadError) throw uploadError
-      
-      const { data: urlData } = supabase
-        .storage
-        .from('catch_images')
-        .getPublicUrl(`catch_${id}/${fileName}`)
-      
-      if (urlData.publicUrl) {
-        newImageUrls.push(urlData.publicUrl)
-      }
+// Input for updating a catch. `images` may mix already-uploaded URLs (kept) and
+// newly selected File objects (to be uploaded).
+export interface CatchUpdateInput {
+  fish_species_id: string
+  bait_type_id: string
+  fishing_rod_id: string | null
+  weight_kg: number | null
+  length_cm: number | null
+  location: string
+  latitude: number | null
+  longitude: number | null
+  notes: string | null
+  images: (File | string)[] | null
+}
+
+export const updateCatch = async (
+  id: string,
+  userId: string,
+  input: CatchUpdateInput
+): Promise<Catch> => {
+  // Resolve the final list of image URLs: keep existing URLs, upload new files.
+  const imageUrls: string[] = []
+
+  for (const image of input.images || []) {
+    if (typeof image === 'string') {
+      imageUrls.push(image)
+      continue
     }
-    
-    imageUrls = newImageUrls
+
+    const fileName = generateFileName(image.name, userId)
+    const path = `${userId}/${fileName}`
+    const { error: uploadError } = await supabase
+      .storage
+      .from('catch_images')
+      .upload(path, image)
+
+    if (uploadError) throw uploadError
+
+    const { data: urlData } = supabase
+      .storage
+      .from('catch_images')
+      .getPublicUrl(path)
+
+    if (urlData.publicUrl) {
+      imageUrls.push(urlData.publicUrl)
+    }
   }
-  
+
   const { data, error } = await supabase
     .from('catches')
     .update({
@@ -272,14 +291,23 @@ export const deleteCatch = async (id: string): Promise<void> => {
   if (fetchError) throw fetchError
   
   if (catchData?.images && catchData.images.length > 0) {
-    for (const imageUrl of catchData.images) {
-      const path = imageUrl.split('/').slice(3).join('/')
+    // Public URLs look like ".../object/public/catch_images/<uid>/<file>".
+    // The storage path is everything after the bucket name.
+    const marker = '/catch_images/'
+    const paths = catchData.images
+      .map((imageUrl: string) => {
+        const index = imageUrl.indexOf(marker)
+        return index === -1 ? null : imageUrl.slice(index + marker.length)
+      })
+      .filter((path: string | null): path is string => !!path)
+
+    if (paths.length > 0) {
       const { error: deleteError } = await supabase
         .storage
         .from('catch_images')
-        .remove([path])
-      
-      if (deleteError) console.error('Failed to delete image:', deleteError)
+        .remove(paths)
+
+      if (deleteError) console.error('Failed to delete images:', deleteError)
     }
   }
   
