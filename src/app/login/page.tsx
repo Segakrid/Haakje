@@ -113,10 +113,16 @@ export default function LoginPage() {
               </div>
 
               <div className="text-sm">
-                <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
-                  Nog geen account? Registreer
+                <Link href="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
+                  Wachtwoord vergeten?
                 </Link>
               </div>
+            </div>
+
+            <div className="text-sm text-center">
+              <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
+                Nog geen account? Registreer
+              </Link>
             </div>
 
             <div>

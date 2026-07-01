@@ -47,7 +47,14 @@ export const useAuth = () => {
     }
   }, [])
 
-  const signUp = useCallback(async (email: string, password: string, name: string) => {
+  // Returns 'signed_in' when registration also produced a session (email
+  // confirmation disabled), 'confirmation_required' when Supabase requires the
+  // user to click the confirmation link first (no session yet), or false on error.
+  const signUp = useCallback(async (
+    email: string,
+    password: string,
+    name: string
+  ): Promise<'signed_in' | 'confirmation_required' | false> => {
     setLoading(true)
     setError(null)
     try {
@@ -56,8 +63,13 @@ export const useAuth = () => {
         setError(error.message)
         return false
       }
+      if (!data.session) {
+        // No session means email confirmation is required: signing up does
+        // NOT log the user in yet, so we must not mark them as authenticated.
+        return 'confirmation_required'
+      }
       setUser(data.user)
-      return true
+      return 'signed_in'
     } catch (err) {
       setError('Registratie mislukt')
       return false

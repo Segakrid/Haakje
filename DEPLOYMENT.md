@@ -47,11 +47,18 @@ Dit creëert in één keer:
 ## Stap 3 — Auth configureren
 
 1. Ga naar **Authentication → Providers** en zorg dat **Email** aanstaat.
-2. Voor een snelle start kun je onder **Authentication → Sign In / Providers →
-   Email** de optie *Confirm email* uitzetten, zodat gebruikers direct kunnen
-   inloggen na registratie. Voor productie wordt e-mailbevestiging aangeraden.
-3. Voeg na stap 5 je Vercel-URL toe onder **Authentication → URL Configuration**
-   (Site URL en Redirect URLs), bijv. `https://haakje.vercel.app`.
+2. Beslis of *Confirm email* (onder **Authentication → Sign In / Providers →
+   Email**) aan of uit staat:
+   - **Aan** (Supabase-default): na registreren krijgt de gebruiker een
+     bevestigingsmail en kan pas daarna inloggen. De app toont in dat geval
+     een "Bevestig je emailadres"-scherm i.p.v. direct in te loggen.
+   - **Uit**: gebruikers zijn direct ingelogd na registreren. Prettiger voor
+     een snelle start, minder geschikt voor productie.
+3. Voeg na stap 5 je Vercel-URL toe onder **Authentication → URL Configuration**:
+   - **Site URL**: bijv. `https://haakje.vercel.app`
+   - **Redirect URLs**: voeg `https://haakje.vercel.app/**` toe (nodig voor
+     zowel e-mailbevestiging als de "wachtwoord vergeten"-link naar
+     `/reset-password`).
 
 ## Stap 4 — API keys ophalen
 

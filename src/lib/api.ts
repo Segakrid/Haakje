@@ -35,6 +35,16 @@ export const getCurrentUser = async () => {
   return { user, error }
 }
 
+export const requestPasswordReset = async (email: string, redirectTo: string) => {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+  return { error }
+}
+
+export const updatePassword = async (password: string) => {
+  const { error } = await supabase.auth.updateUser({ password })
+  return { error }
+}
+
 // Fishing Rods
 
 export const getFishingRods = async (userId: string): Promise<FishingRod[]> => {
