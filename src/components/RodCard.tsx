@@ -21,7 +21,10 @@ export const RodCard = ({ rod, onDelete }: RodCardProps) => {
         <div className="flex justify-between items-start">
           <div>
             <h3 className="text-lg font-semibold text-gray-800">{rod.name}</h3>
-            <p className="text-sm text-gray-500">{rod.brand} {rod.model}</p>
+            <p className="text-sm text-gray-500">{rod.soort}</p>
+            {(rod.brand || rod.model) && (
+              <p className="text-sm text-gray-500">{[rod.brand, rod.model].filter(Boolean).join(' ')}</p>
+            )}
           </div>
           
           {/* Menu */}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { FishSpecies, BaitType } from '@/types/database'
-import { getFishSpecies, getBaitTypes } from '@/lib/api'
+import { getFishSpecies, getBaitTypes, createFishSpecies } from '@/lib/api'
 
 export const useReferenceData = () => {
   const [fishSpecies, setFishSpecies] = useState<FishSpecies[]>([])
@@ -29,11 +29,21 @@ export const useReferenceData = () => {
     fetchReferenceData()
   }, [fetchReferenceData])
 
+  const addFishSpecies = useCallback(async (name: string) => {
+    const species = await createFishSpecies(name)
+    setFishSpecies(prev => {
+      if (prev.some(s => s.id === species.id)) return prev
+      return [...prev, species].sort((a, b) => a.name.localeCompare(b.name))
+    })
+    return species
+  }, [])
+
   return {
     fishSpecies,
     baitTypes,
     loading,
     error,
     fetchReferenceData,
+    addFishSpecies,
   }
 }

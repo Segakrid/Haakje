@@ -9,8 +9,9 @@ export interface FishingRod {
   id: string
   user_id: string
   name: string
-  brand: string
-  model: string
+  soort: string
+  brand: string | null
+  model: string | null
   length: number | null
   weight: number | null
   material: string | null
@@ -76,8 +77,9 @@ export interface CatchInput {
 
 export interface FishingRodInput {
   name: string
-  brand: string
-  model: string
+  soort: string
+  brand: string | null
+  model: string | null
   length: number | null
   weight: number | null
   material: string | null

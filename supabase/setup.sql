@@ -35,14 +35,21 @@ CREATE TABLE IF NOT EXISTS fishing_rods (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
-  brand TEXT NOT NULL,
-  model TEXT NOT NULL,
+  soort TEXT NOT NULL DEFAULT '',
+  brand TEXT,
+  model TEXT,
   length NUMERIC(10,2),
   weight NUMERIC(10,2),
   material TEXT,
   description TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Migrate existing installs: only naam and soort are required, the rest
+-- (merk, model, lengte, gewicht, materiaal, beschrijving) is optional.
+ALTER TABLE fishing_rods ADD COLUMN IF NOT EXISTS soort TEXT NOT NULL DEFAULT '';
+ALTER TABLE fishing_rods ALTER COLUMN brand DROP NOT NULL;
+ALTER TABLE fishing_rods ALTER COLUMN model DROP NOT NULL;
 
 -- Catches table
 CREATE TABLE IF NOT EXISTS catches (
@@ -196,6 +203,14 @@ CREATE POLICY "Anyone can view fish species" ON fish_species
 DROP POLICY IF EXISTS "Anyone can view bait types" ON bait_types;
 CREATE POLICY "Anyone can view bait types" ON bait_types
   FOR SELECT USING (true);
+
+-- Fish species are a shared reference list: any signed-in user can add a
+-- missing species (e.g. from the catch form), it then becomes available to
+-- everyone. The UNIQUE constraint on name prevents duplicates.
+DROP POLICY IF EXISTS "Authenticated users can add fish species" ON fish_species;
+CREATE POLICY "Authenticated users can add fish species" ON fish_species
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
 
 -- Storage for catch images
 -- Create a public bucket so getPublicUrl() works for displaying images.

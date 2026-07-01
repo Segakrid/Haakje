@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { fishingRodSchema, type FishingRodFormData } from '@/lib/validations'
 import { useAuth } from '@/hooks/useAuth'
 import { useFishingRods } from '@/hooks/useFishingRods'
+import { ROD_TYPES } from '@/lib/constants'
 import { FishingRod as FishingRodIcon, ArrowLeft, Loader2, Tag, Ruler, Weight, Type } from 'lucide-react'
 import { AuthGuard } from '@/components/AuthGuard'
 
@@ -13,13 +14,14 @@ export default function NewRodPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { addRod } = useFishingRods(user?.id || null)
-  
+
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FishingRodFormData>({
     resolver: zodResolver(fishingRodSchema),
     defaultValues: {
       name: '',
-      brand: '',
-      model: '',
+      soort: '',
+      brand: null,
+      model: null,
       length: null,
       weight: null,
       material: null,
@@ -29,12 +31,13 @@ export default function NewRodPage() {
 
   const onSubmit = async (data: FishingRodFormData) => {
     if (!user?.id) return
-    
+
     try {
       const result = await addRod({
         name: data.name,
-        brand: data.brand,
-        model: data.model,
+        soort: data.soort,
+        brand: data.brand || null,
+        model: data.model || null,
         length: data.length ?? null,
         weight: data.weight ?? null,
         material: data.material ?? null,
@@ -66,8 +69,8 @@ export default function NewRodPage() {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-          {/* Name, Brand, Model */}
-          <div className="grid md:grid-cols-3 gap-6">
+          {/* Name and Type (required) */}
+          <div className="grid md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Naam *
@@ -85,7 +88,30 @@ export default function NewRodPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Merk *
+                Soort *
+              </label>
+              <select
+                {...register('soort')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Selecteer soort</option>
+                {ROD_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+              {errors.soort && (
+                <p className="mt-1 text-sm text-red-600">{errors.soort.message}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Brand and Model (optional) */}
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Merk
               </label>
               <input
                 type="text"
@@ -100,7 +126,7 @@ export default function NewRodPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Model *
+                Model
               </label>
               <input
                 type="text"

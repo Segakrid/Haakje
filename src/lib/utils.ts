@@ -1,6 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import { nl } from 'date-fns/locale'
-import { Catch, SortBy, SortOrder } from '@/types/database'
+import { Catch, FishingRod, SortBy, SortOrder } from '@/types/database'
 
 // Format date for display
 export const formatDate = (dateString: string): string => {
@@ -96,6 +96,13 @@ export const getBaitName = (catchItem: Catch): string => {
 // Get rod name
 export const getRodName = (catchItem: Catch): string => {
   return catchItem.fishing_rod?.name || 'Geen'
+}
+
+// Label for a rod option, e.g. "Mijn hengel (Shimano Stella)" or just "Mijn hengel"
+// when brand/model are not set (both are optional fields).
+export const getRodLabel = (rod: FishingRod): string => {
+  const details = [rod.brand, rod.model].filter(Boolean).join(' ')
+  return details ? `${rod.name} (${details})` : rod.name
 }
 
 // Truncate text

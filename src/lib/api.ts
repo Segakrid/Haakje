@@ -115,6 +115,30 @@ export const getFishSpecies = async (): Promise<FishSpecies[]> => {
   return data || []
 }
 
+export const createFishSpecies = async (name: string): Promise<FishSpecies> => {
+  const trimmed = name.trim()
+  const { data, error } = await supabase
+    .from('fish_species')
+    .insert({ name: trimmed })
+    .select()
+    .single()
+
+  if (error) {
+    // Unique violation: someone already added this species, use it instead.
+    if (error.code === '23505') {
+      const { data: existing, error: fetchError } = await supabase
+        .from('fish_species')
+        .select('*')
+        .ilike('name', trimmed)
+        .single()
+      if (fetchError) throw fetchError
+      return existing
+    }
+    throw error
+  }
+  return data
+}
+
 // Bait Types (predefined)
 export const getBaitTypes = async (): Promise<BaitType[]> => {
   const { data, error } = await supabase
