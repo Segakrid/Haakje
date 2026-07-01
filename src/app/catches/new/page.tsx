@@ -9,14 +9,16 @@ import { useAuth } from '@/hooks/useAuth'
 import { useCatches } from '@/hooks/useCatches'
 import { useReferenceData } from '@/hooks/useReferenceData'
 import { useFishingRods } from '@/hooks/useFishingRods'
-import { Fish, Camera, MapPin, Weight, Ruler, Type, Worm, FishingRod as FishingRodIcon, ArrowLeft, Loader2 } from 'lucide-react'
+import { Camera, MapPin, Weight, Ruler, Type, Worm, FishingRod as FishingRodIcon, ArrowLeft, Loader2 } from 'lucide-react'
 import { AuthGuard } from '@/components/AuthGuard'
+import { FishSpeciesField } from '@/components/FishSpeciesField'
+import { getRodLabel } from '@/lib/utils'
 
 export default function NewCatchPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { addCatch } = useCatches(user?.id || null)
-  const { fishSpecies, baitTypes, loading: refLoading } = useReferenceData()
+  const { fishSpecies, baitTypes, loading: refLoading, addFishSpecies } = useReferenceData()
   const { rods, loading: rodsLoading } = useFishingRods(user?.id || null)
   
   const [images, setImages] = useState<File[]>([])
@@ -203,26 +205,13 @@ export default function NewCatchPage() {
 
           {/* Species and Bait */}
           <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Fish className="w-4 h-4 inline mr-2" />
-                Vissoort *
-              </label>
-              <select
-                {...register('fish_species_id')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Selecteer vissoort</option>
-                {fishSpecies.map((species) => (
-                  <option key={species.id} value={species.id}>
-                    {species.name}
-                  </option>
-                ))}
-              </select>
-              {errors.fish_species_id && (
-                <p className="mt-1 text-sm text-red-600">{errors.fish_species_id.message}</p>
-              )}
-            </div>
+            <FishSpeciesField
+              fishSpecies={fishSpecies}
+              value={watch('fish_species_id')}
+              onChange={(id) => setValue('fish_species_id', id, { shouldValidate: true })}
+              onAdd={addFishSpecies}
+              error={errors.fish_species_id?.message}
+            />
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -259,7 +248,7 @@ export default function NewCatchPage() {
               <option value="">Geen hengel</option>
               {rods.map((rod) => (
                 <option key={rod.id} value={rod.id}>
-                  {rod.name} ({rod.brand} {rod.model})
+                  {getRodLabel(rod)}
                 </option>
               ))}
             </select>

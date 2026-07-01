@@ -3,8 +3,9 @@ import { z } from 'zod'
 // Fishing Rod validation
 export const fishingRodSchema = z.object({
   name: z.string().min(1, 'Naam is verplicht'),
-  brand: z.string().min(1, 'Merk is verplicht'),
-  model: z.string().min(1, 'Model is verplicht'),
+  soort: z.string().min(1, 'Soort is verplicht'),
+  brand: z.string().nullable().optional(),
+  model: z.string().nullable().optional(),
   length: z.number().min(0.1, 'Lengte moet minimaal 0.1m zijn').nullable().optional(),
   weight: z.number().min(0.01, 'Gewicht moet minimaal 0.01kg zijn').nullable().optional(),
   material: z.string().nullable().optional(),

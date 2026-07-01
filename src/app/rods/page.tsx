@@ -18,8 +18,9 @@ export default function RodsPage() {
     const query = searchQuery.toLowerCase()
     return (
       rod.name.toLowerCase().includes(query) ||
-      rod.brand.toLowerCase().includes(query) ||
-      rod.model.toLowerCase().includes(query) ||
+      rod.soort.toLowerCase().includes(query) ||
+      (rod.brand || '').toLowerCase().includes(query) ||
+      (rod.model || '').toLowerCase().includes(query) ||
       (rod.description || '').toLowerCase().includes(query)
     )
   })
