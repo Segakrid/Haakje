@@ -12,6 +12,7 @@ import { GuestGuard } from '@/components/GuestGuard'
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
+  const [confirmationRequired, setConfirmationRequired] = useState(false)
   const { signUp, loading, error } = useAuth()
   const router = useRouter()
 
@@ -25,10 +26,31 @@ export default function RegisterPage() {
   })
 
   const onSubmit = async (data: RegisterFormData) => {
-    const success = await signUp(data.email, data.password, data.name)
-    if (success) {
+    const result = await signUp(data.email, data.password, data.name)
+    if (result === 'signed_in') {
       router.push('/catches')
+    } else if (result === 'confirmation_required') {
+      setConfirmationRequired(true)
     }
+  }
+
+  if (confirmationRequired) {
+    return (
+      <GuestGuard>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-md w-full space-y-4 text-center">
+            <h2 className="text-2xl font-bold text-gray-900">Bevestig je emailadres</h2>
+            <p className="text-gray-600">
+              We hebben een bevestigingslink gestuurd. Klik op de link in de email om je
+              account te activeren, en log daarna in.
+            </p>
+            <Link href="/login" className="inline-block font-medium text-blue-600 hover:text-blue-500">
+              Naar inloggen
+            </Link>
+          </div>
+        </div>
+      </GuestGuard>
+    )
   }
 
   return (

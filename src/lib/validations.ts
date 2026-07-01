@@ -52,3 +52,21 @@ export const registerSchema = z.object({
 })
 
 export type RegisterFormData = z.infer<typeof registerSchema>
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Ongeldig emailadres'),
+})
+
+export type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>
+
+export const resetPasswordSchema = z
+  .object({
+    password: z.string().min(6, 'Wachtwoord moet minimaal 6 tekens zijn'),
+    confirmPassword: z.string().min(6, 'Wachtwoord moet minimaal 6 tekens zijn'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Wachtwoorden komen niet overeen',
+    path: ['confirmPassword'],
+  })
+
+export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>
