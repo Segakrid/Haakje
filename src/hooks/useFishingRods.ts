@@ -1,89 +1,83 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { FishingRod, FishingRodInput } from '@/types/database'
 import { getFishingRods, createFishingRod, updateFishingRod, deleteFishingRod } from '@/lib/api'
 
+const cache = new Map<string, FishingRod[]>()
+
+export const clearRodCache = () => cache.clear()
+
 export const useFishingRods = (userId: string | null) => {
-  const [rods, setRods] = useState<FishingRod[]>([])
-  const [loading, setLoading] = useState(false)
+  const [rods, setRods] = useState<FishingRod[]>(() => (userId && cache.get(userId)) || [])
+  const [loadedFor, setLoadedFor] = useState<string | null>(() => (userId && cache.has(userId) ? userId : null))
   const [error, setError] = useState<string | null>(null)
 
-  const fetchRods = useCallback(async () => {
-    if (!userId) {
-      setRods([])
-      return
-    }
-    
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await getFishingRods(userId)
-      setRods(data)
-    } catch (err) {
-      setError('Failed to fetch fishing rods')
-    } finally {
-      setLoading(false)
-    }
-  }, [userId])
+  const commit = useCallback(
+    (update: (prev: FishingRod[]) => FishingRod[]) => {
+      setRods((prev) => {
+        const next = update(prev)
+        if (userId) cache.set(userId, next)
+        return next
+      })
+    },
+    [userId]
+  )
+
+  const [reloadKey, setReloadKey] = useState(0)
+  const refresh = useCallback(() => setReloadKey((key) => key + 1), [])
 
   useEffect(() => {
-    fetchRods()
-  }, [fetchRods])
-
-  const addRod = useCallback(async (input: FishingRodInput) => {
-    if (!userId) {
-      setError('User not authenticated')
-      return null
+    if (!userId) return
+    let active = true
+    getFishingRods(userId)
+      .then((data) => {
+        cache.set(userId, data)
+        if (!active) return
+        setRods(data)
+        setError(null)
+      })
+      .catch(() => {
+        if (active) setError('Je hengels konden niet worden geladen.')
+      })
+      .finally(() => {
+        if (active) setLoadedFor(userId)
+      })
+    return () => {
+      active = false
     }
-    
-    setLoading(true)
-    setError(null)
-    try {
-      const newRod = await createFishingRod(userId, input)
-      setRods(prev => [newRod, ...prev])
-      return newRod
-    } catch (err) {
-      setError('Failed to create fishing rod')
-      return null
-    } finally {
-      setLoading(false)
-    }
-  }, [userId])
+  }, [userId, reloadKey])
 
-  const editRod = useCallback(async (id: string, input: Partial<FishingRodInput>) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const updatedRod = await updateFishingRod(id, input)
-      setRods(prev => prev.map(r => r.id === id ? updatedRod : r))
-      return updatedRod
-    } catch (err) {
-      setError('Failed to update fishing rod')
-      return null
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const addRod = useCallback(
+    async (input: FishingRodInput) => {
+      if (!userId) throw new Error('Niet ingelogd')
+      const created = await createFishingRod(userId, input)
+      commit((prev) => [created, ...prev])
+      return created
+    },
+    [userId, commit]
+  )
 
-  const removeRod = useCallback(async (id: string) => {
-    setLoading(true)
-    setError(null)
-    try {
+  const editRod = useCallback(
+    async (id: string, input: Partial<FishingRodInput>) => {
+      const updated = await updateFishingRod(id, input)
+      commit((prev) => prev.map((r) => (r.id === id ? updated : r)))
+      return updated
+    },
+    [commit]
+  )
+
+  const removeRod = useCallback(
+    async (id: string) => {
       await deleteFishingRod(id)
-      setRods(prev => prev.filter(r => r.id !== id))
-      return true
-    } catch (err) {
-      setError('Failed to delete fishing rod')
-      return false
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+      commit((prev) => prev.filter((r) => r.id !== id))
+    },
+    [commit]
+  )
 
   return {
     rods,
-    loading,
+    loading: !userId || loadedFor !== userId,
     error,
-    fetchRods,
+    refresh,
     addRod,
     editRod,
     removeRod,

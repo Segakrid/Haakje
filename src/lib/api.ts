@@ -1,6 +1,42 @@
 import { supabase } from './supabaseClient'
 import { Catch, FishingRod, FishSpecies, BaitType, CatchInput, FishingRodInput } from '@/types/database'
-import { generateFileName } from './utils'
+import { compressImage, generateFileName } from './utils'
+
+const BUCKET = 'catch_images'
+const CATCH_SELECT = `
+  *,
+  fish_species:fish_species_id(*),
+  bait_type:bait_type_id(*),
+  fishing_rod:fishing_rod_id(*)
+`
+
+// Publieke URL's zien eruit als ".../object/public/catch_images/<uid>/<bestand>".
+// Het opslagpad is alles ná de bucketnaam.
+const storagePathFromUrl = (imageUrl: string): string | null => {
+  const marker = `/${BUCKET}/`
+  const index = imageUrl.indexOf(marker)
+  return index === -1 ? null : decodeURIComponent(imageUrl.slice(index + marker.length).split('?')[0])
+}
+
+const removeImages = async (urls: string[]) => {
+  const paths = urls.map(storagePathFromUrl).filter((p): p is string => !!p)
+  if (paths.length === 0) return
+  const { error } = await supabase.storage.from(BUCKET).remove(paths)
+  if (error) console.error('Afbeeldingen verwijderen mislukt:', error)
+}
+
+// Verkleint de foto in de browser (telefoonfoto's zijn al snel 5-10 MB) en
+// uploadt hem naar de map van de gebruiker.
+const uploadImage = async (userId: string, image: File): Promise<string> => {
+  const file = await compressImage(image)
+  const path = `${userId}/${generateFileName(file.name, userId)}`
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    contentType: file.type || undefined,
+    cacheControl: '31536000',
+  })
+  if (error) throw error
+  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+}
 
 // Authentication
 
@@ -28,11 +64,6 @@ export const signIn = async (email: string, password: string) => {
 export const signOut = async () => {
   const { error } = await supabase.auth.signOut()
   return { error }
-}
-
-export const getCurrentUser = async () => {
-  const { data: { user }, error } = await supabase.auth.getUser()
-  return { user, error }
 }
 
 export const requestPasswordReset = async (email: string, redirectTo: string) => {
@@ -63,7 +94,7 @@ export const getFishingRod = async (id: string): Promise<FishingRod | null> => {
     .from('fishing_rods')
     .select('*')
     .eq('id', id)
-    .single()
+    .maybeSingle()
   
   if (error) throw error
   return data
@@ -131,102 +162,75 @@ export const getBaitTypes = async (): Promise<BaitType[]> => {
 export const getCatches = async (userId: string): Promise<Catch[]> => {
   const { data, error } = await supabase
     .from('catches')
-    .select(`
-      *,
-      fish_species:fish_species_id(*),
-      bait_type:bait_type_id(*),
-      fishing_rod:fishing_rod_id(*)
-    `)
+    .select(CATCH_SELECT)
     .eq('user_id', userId)
     .order('caught_at', { ascending: false })
-  
+
   if (error) throw error
-  return data || []
+  return (data || []).map(normalizeCatch)
 }
 
 export const getCatch = async (id: string): Promise<Catch | null> => {
   const { data, error } = await supabase
     .from('catches')
-    .select(`
-      *,
-      fish_species:fish_species_id(*),
-      bait_type:bait_type_id(*),
-      fishing_rod:fishing_rod_id(*)
-    `)
+    .select(CATCH_SELECT)
     .eq('id', id)
-    .single()
-  
+    .maybeSingle()
+
   if (error) throw error
-  return data
+  return data ? normalizeCatch(data) : null
 }
+
+// Postgres NUMERIC-kolommen komen als string of number terug; `images` kan NULL zijn.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const normalizeCatch = (row: any): Catch => ({
+  ...row,
+  weight_kg: row.weight_kg === null || row.weight_kg === undefined ? null : Number(row.weight_kg),
+  length_cm: row.length_cm === null || row.length_cm === undefined ? null : Number(row.length_cm),
+  latitude: row.latitude === null || row.latitude === undefined ? null : Number(row.latitude),
+  longitude: row.longitude === null || row.longitude === undefined ? null : Number(row.longitude),
+  images: row.images || [],
+})
 
 export const createCatch = async (userId: string, input: CatchInput): Promise<Catch> => {
-  // Upload images first
   const imageUrls: string[] = []
-  
-  if (input.images && input.images.length > 0) {
-    for (const image of input.images) {
-      const fileName = generateFileName(image.name, userId)
-      const path = `${userId}/${fileName}`
-      const { error: uploadError } = await supabase
-        .storage
-        .from('catch_images')
-        .upload(path, image)
 
-      if (uploadError) throw uploadError
-
-      const { data: urlData } = supabase
-        .storage
-        .from('catch_images')
-        .getPublicUrl(path)
-
-      if (urlData.publicUrl) {
-        imageUrls.push(urlData.publicUrl)
-      }
+  try {
+    for (const image of input.images || []) {
+      imageUrls.push(await uploadImage(userId, image))
     }
+
+    const { data, error } = await supabase
+      .from('catches')
+      .insert({
+        user_id: userId,
+        fish_species_id: input.fish_species_id,
+        bait_type_id: input.bait_type_id,
+        fishing_rod_id: input.fishing_rod_id,
+        weight_kg: input.weight_kg,
+        length_cm: input.length_cm,
+        location: input.location,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        notes: input.notes,
+        images: imageUrls,
+        caught_at: input.caught_at,
+      })
+      .select(CATCH_SELECT)
+      .single()
+
+    if (error) throw error
+    return normalizeCatch(data)
+  } catch (err) {
+    // Geen weesbestanden achterlaten als opslaan halverwege misgaat.
+    await removeImages(imageUrls)
+    throw err
   }
-  
-  // Create catch record
-  const { data, error } = await supabase
-    .from('catches')
-    .insert({
-      user_id: userId,
-      fish_species_id: input.fish_species_id,
-      bait_type_id: input.bait_type_id,
-      fishing_rod_id: input.fishing_rod_id,
-      weight_kg: input.weight_kg,
-      length_cm: input.length_cm,
-      location: input.location,
-      latitude: input.latitude,
-      longitude: input.longitude,
-      notes: input.notes,
-      images: imageUrls,
-      caught_at: new Date().toISOString(),
-    })
-    .select(`
-      *,
-      fish_species:fish_species_id(*),
-      bait_type:bait_type_id(*),
-      fishing_rod:fishing_rod_id(*)
-    `)
-    .single()
-  
-  if (error) throw error
-  return data
 }
 
-// Input for updating a catch. `images` may mix already-uploaded URLs (kept) and
-// newly selected File objects (to be uploaded).
-export interface CatchUpdateInput {
-  fish_species_id: string
-  bait_type_id: string
-  fishing_rod_id: string | null
-  weight_kg: number | null
-  length_cm: number | null
-  location: string
-  latitude: number | null
-  longitude: number | null
-  notes: string | null
+// Invoer voor het bijwerken van een vangst. `images` mag bestaande URL's (blijven
+// staan) en nieuw gekozen File-objecten (worden geüpload) door elkaar bevatten.
+export interface CatchUpdateInput extends Omit<CatchInput, 'images'> {
   images: (File | string)[] | null
 }
 
@@ -235,116 +239,66 @@ export const updateCatch = async (
   userId: string,
   input: CatchUpdateInput
 ): Promise<Catch> => {
-  // Resolve the final list of image URLs: keep existing URLs, upload new files.
+  const { data: current } = await supabase.from('catches').select('images').eq('id', id).maybeSingle()
+  const previousUrls: string[] = current?.images || []
+
   const imageUrls: string[] = []
+  const uploaded: string[] = []
 
-  for (const image of input.images || []) {
-    if (typeof image === 'string') {
-      imageUrls.push(image)
-      continue
+  try {
+    for (const image of input.images || []) {
+      if (typeof image === 'string') {
+        imageUrls.push(image)
+      } else {
+        const url = await uploadImage(userId, image)
+        uploaded.push(url)
+        imageUrls.push(url)
+      }
     }
 
-    const fileName = generateFileName(image.name, userId)
-    const path = `${userId}/${fileName}`
-    const { error: uploadError } = await supabase
-      .storage
-      .from('catch_images')
-      .upload(path, image)
+    const { data, error } = await supabase
+      .from('catches')
+      .update({
+        fish_species_id: input.fish_species_id,
+        bait_type_id: input.bait_type_id,
+        fishing_rod_id: input.fishing_rod_id,
+        weight_kg: input.weight_kg,
+        length_cm: input.length_cm,
+        location: input.location,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        notes: input.notes,
+        images: imageUrls,
+        caught_at: input.caught_at,
+      })
+      .eq('id', id)
+      .select(CATCH_SELECT)
+      .single()
 
-    if (uploadError) throw uploadError
+    if (error) throw error
 
-    const { data: urlData } = supabase
-      .storage
-      .from('catch_images')
-      .getPublicUrl(path)
-
-    if (urlData.publicUrl) {
-      imageUrls.push(urlData.publicUrl)
-    }
+    // Foto's die de gebruiker heeft weggehaald ook echt uit de opslag verwijderen.
+    await removeImages(previousUrls.filter((url) => !imageUrls.includes(url)))
+    return normalizeCatch(data)
+  } catch (err) {
+    await removeImages(uploaded)
+    throw err
   }
-
-  const { data, error } = await supabase
-    .from('catches')
-    .update({
-      fish_species_id: input.fish_species_id,
-      bait_type_id: input.bait_type_id,
-      fishing_rod_id: input.fishing_rod_id,
-      weight_kg: input.weight_kg,
-      length_cm: input.length_cm,
-      location: input.location,
-      latitude: input.latitude,
-      longitude: input.longitude,
-      notes: input.notes,
-      images: imageUrls,
-    })
-    .eq('id', id)
-    .select(`
-      *,
-      fish_species:fish_species_id(*),
-      bait_type:bait_type_id(*),
-      fishing_rod:fishing_rod_id(*)
-    `)
-    .single()
-  
-  if (error) throw error
-  return data
 }
 
 export const deleteCatch = async (id: string): Promise<void> => {
-  // First, delete associated images from storage
   const { data: catchData, error: fetchError } = await supabase
     .from('catches')
     .select('images')
     .eq('id', id)
-    .single()
-  
+    .maybeSingle()
+
   if (fetchError) throw fetchError
-  
-  if (catchData?.images && catchData.images.length > 0) {
-    // Public URLs look like ".../object/public/catch_images/<uid>/<file>".
-    // The storage path is everything after the bucket name.
-    const marker = '/catch_images/'
-    const paths = catchData.images
-      .map((imageUrl: string) => {
-        const index = imageUrl.indexOf(marker)
-        return index === -1 ? null : imageUrl.slice(index + marker.length)
-      })
-      .filter((path: string | null): path is string => !!path)
 
-    if (paths.length > 0) {
-      const { error: deleteError } = await supabase
-        .storage
-        .from('catch_images')
-        .remove(paths)
-
-      if (deleteError) console.error('Failed to delete images:', deleteError)
-    }
-  }
-  
-  // Delete the catch record
-  const { error } = await supabase
-    .from('catches')
-    .delete()
-    .eq('id', id)
-  
+  const { error } = await supabase.from('catches').delete().eq('id', id)
   if (error) throw error
-}
 
-// Statistics
-export const getCatchStatistics = async (userId: string) => {
-  const { data, error } = await supabase
-    .from('catches')
-    .select('*')
-    .eq('user_id', userId)
-  
-  if (error) throw error
-  
-  const catches = data || []
-  
-  return {
-    totalCatches: catches.length,
-    totalWeight: catches.reduce((sum, c) => sum + (c.weight_kg || 0), 0),
-    totalSpecies: new Set(catches.map(c => c.fish_species_id).filter(Boolean)).size,
-    totalLocations: new Set(catches.map(c => c.location).filter(Boolean)).size,
-  }
+  // Pas ná het verwijderen van de rij de bestanden opruimen: zo raakt een vangst
+  // nooit zijn foto's kwijt als het verwijderen zelf mislukt.
+  await removeImages(catchData?.images || [])
 }

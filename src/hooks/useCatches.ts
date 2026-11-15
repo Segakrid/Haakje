@@ -1,129 +1,91 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Catch, CatchInput, SortBy, SortOrder } from '@/types/database'
+import { useCallback, useEffect, useState } from 'react'
+import { Catch, CatchInput } from '@/types/database'
 import { getCatches, createCatch, updateCatch, deleteCatch, CatchUpdateInput } from '@/lib/api'
-import { sortCatches, filterBySpecies, filterByLocation, filterByDateRange } from '@/lib/utils'
+
+// Eenvoudige cache per gebruiker: bij terugnavigeren staan de vangsten er direct,
+// terwijl op de achtergrond de verse lijst wordt opgehaald.
+const cache = new Map<string, Catch[]>()
+
+export const clearCatchCache = () => cache.clear()
+
+const byDateDesc = (list: Catch[]) =>
+  [...list].sort((a, b) => new Date(b.caught_at).getTime() - new Date(a.caught_at).getTime())
 
 export const useCatches = (userId: string | null) => {
-  const [catches, setCatches] = useState<Catch[]>([])
-  const [loading, setLoading] = useState(false)
+  const [catches, setCatches] = useState<Catch[]>(() => (userId && cache.get(userId)) || [])
+  const [loadedFor, setLoadedFor] = useState<string | null>(() => (userId && cache.has(userId) ? userId : null))
   const [error, setError] = useState<string | null>(null)
-  const [sortBy, setSortBy] = useState<SortBy>('date')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
-  const [speciesFilter, setSpeciesFilter] = useState<string>('')
-  const [locationFilter, setLocationFilter] = useState<string>('')
-  const [startDateFilter, setStartDateFilter] = useState<string | null>(null)
-  const [endDateFilter, setEndDateFilter] = useState<string | null>(null)
 
-  const fetchCatches = useCallback(async () => {
-    if (!userId) {
-      setCatches([])
-      return
-    }
-    
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await getCatches(userId)
-      setCatches(data)
-    } catch (err) {
-      setError('Failed to fetch catches')
-    } finally {
-      setLoading(false)
-    }
-  }, [userId])
+  const commit = useCallback(
+    (update: (prev: Catch[]) => Catch[]) => {
+      setCatches((prev) => {
+        const next = byDateDesc(update(prev))
+        if (userId) cache.set(userId, next)
+        return next
+      })
+    },
+    [userId]
+  )
+
+  const [reloadKey, setReloadKey] = useState(0)
+  const refresh = useCallback(() => setReloadKey((key) => key + 1), [])
 
   useEffect(() => {
-    fetchCatches()
-  }, [fetchCatches])
-
-  const addCatch = useCallback(async (input: CatchInput) => {
-    if (!userId) {
-      setError('User not authenticated')
-      return null
+    if (!userId) return
+    let active = true
+    getCatches(userId)
+      .then((data) => {
+        cache.set(userId, data)
+        if (!active) return
+        setCatches(data)
+        setError(null)
+      })
+      .catch(() => {
+        if (active) setError('Je vangsten konden niet worden geladen.')
+      })
+      .finally(() => {
+        if (active) setLoadedFor(userId)
+      })
+    return () => {
+      active = false
     }
-    
-    setLoading(true)
-    setError(null)
-    try {
-      const newCatch = await createCatch(userId, input)
-      setCatches(prev => [newCatch, ...prev])
-      return newCatch
-    } catch (err) {
-      setError('Failed to create catch')
-      return null
-    } finally {
-      setLoading(false)
-    }
-  }, [userId])
+  }, [userId, reloadKey])
 
-  const editCatch = useCallback(async (id: string, input: CatchUpdateInput) => {
-    if (!userId) {
-      setError('User not authenticated')
-      return null
-    }
+  const addCatch = useCallback(
+    async (input: CatchInput) => {
+      if (!userId) throw new Error('Niet ingelogd')
+      const created = await createCatch(userId, input)
+      commit((prev) => [created, ...prev])
+      return created
+    },
+    [userId, commit]
+  )
 
-    setLoading(true)
-    setError(null)
-    try {
-      const updatedCatch = await updateCatch(id, userId, input)
-      setCatches(prev => prev.map(c => c.id === id ? updatedCatch : c))
-      return updatedCatch
-    } catch (err) {
-      setError('Failed to update catch')
-      return null
-    } finally {
-      setLoading(false)
-    }
-  }, [userId])
+  const editCatch = useCallback(
+    async (id: string, input: CatchUpdateInput) => {
+      if (!userId) throw new Error('Niet ingelogd')
+      const updated = await updateCatch(id, userId, input)
+      commit((prev) => (prev.some((c) => c.id === id) ? prev.map((c) => (c.id === id ? updated : c)) : [updated, ...prev]))
+      return updated
+    },
+    [userId, commit]
+  )
 
-  const removeCatch = useCallback(async (id: string) => {
-    setLoading(true)
-    setError(null)
-    try {
+  const removeCatch = useCallback(
+    async (id: string) => {
       await deleteCatch(id)
-      setCatches(prev => prev.filter(c => c.id !== id))
-      return true
-    } catch (err) {
-      setError('Failed to delete catch')
-      return false
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  // Filtered and sorted catches
-  const filteredCatches = sortCatches(
-    filterByDateRange(
-      filterByLocation(
-        filterBySpecies(catches, speciesFilter),
-        locationFilter
-      ),
-      startDateFilter,
-      endDateFilter
-    ),
-    sortBy,
-    sortOrder
+      commit((prev) => prev.filter((c) => c.id !== id))
+    },
+    [commit]
   )
 
   return {
-    catches: filteredCatches,
-    loading,
+    catches,
+    loading: !userId || loadedFor !== userId,
     error,
-    fetchCatches,
+    refresh,
     addCatch,
     editCatch,
     removeCatch,
-    sortBy,
-    setSortBy,
-    sortOrder,
-    setSortOrder,
-    speciesFilter,
-    setSpeciesFilter,
-    locationFilter,
-    setLocationFilter,
-    startDateFilter,
-    setStartDateFilter,
-    endDateFilter,
-    setEndDateFilter,
   }
 }

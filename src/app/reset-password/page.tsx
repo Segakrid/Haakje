@@ -8,7 +8,12 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { resetPasswordSchema, type ResetPasswordFormData } from '@/lib/validations'
 import { updatePassword, signOut } from '@/lib/api'
 import { supabase } from '@/lib/supabaseClient'
-import { Loader2, Lock } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import { translateAuthError } from '@/lib/utils'
+import { AuthShell } from '@/components/AuthShell'
+import { PasswordField } from '@/components/PasswordField'
+import { PageLoader } from '@/components/ui/PageLoader'
+import { ErrorBanner } from '@/components/ui/Bits'
 
 // Reached via the reset-password email link. Supabase's client automatically
 // exchanges the `?code=` in the URL for a (temporary) recovery session and
@@ -55,7 +60,7 @@ export default function ResetPasswordPage() {
     setError(null)
     const { error: updateError } = await updatePassword(data.password)
     if (updateError) {
-      setError(updateError.message)
+      setError(translateAuthError(updateError.message))
       return
     }
     await signOut()
@@ -63,106 +68,43 @@ export default function ResetPasswordPage() {
     setTimeout(() => router.push('/login'), 2000)
   }
 
-  if (status === 'checking') {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-      </div>
-    )
-  }
+  if (status === 'checking') return <PageLoader label="Link controleren…" />
 
   if (status === 'invalid') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
-        <div className="max-w-md w-full text-center space-y-4">
-          <h2 className="text-2xl font-bold text-gray-900">Link ongeldig of verlopen</h2>
-          <p className="text-gray-600">
-            Vraag een nieuwe link aan om je wachtwoord te resetten.
-          </p>
-          <Link href="/forgot-password" className="inline-block font-medium text-blue-600 hover:text-blue-500">
-            Nieuwe resetlink aanvragen
-          </Link>
-        </div>
-      </div>
+      <AuthShell title="Link verlopen" subtitle="Deze resetlink is ongeldig of niet meer geldig.">
+        <Link href="/forgot-password" className="btn btn-primary w-full">Nieuwe resetlink aanvragen</Link>
+      </AuthShell>
     )
   }
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
-        <div className="max-w-md w-full text-center space-y-4">
-          <h2 className="text-2xl font-bold text-gray-900">Wachtwoord gewijzigd</h2>
-          <p className="text-gray-600">Je wordt doorgestuurd naar de inlogpagina...</p>
-        </div>
-      </div>
+      <AuthShell title="Wachtwoord gewijzigd" subtitle="Je wordt doorgestuurd naar de inlogpagina…">
+        <Link href="/login" className="btn btn-primary w-full">Nu inloggen</Link>
+      </AuthShell>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <AuthShell title="Nieuw wachtwoord" subtitle="Kies een nieuw wachtwoord voor je account.">
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+        {error && <ErrorBanner message={error} />}
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Nieuw wachtwoord instellen
-          </h2>
+          <label htmlFor="password" className="label">Nieuw wachtwoord</label>
+          <PasswordField id="password" autoComplete="new-password" placeholder="Minimaal 6 tekens" aria-invalid={!!errors.password} {...register('password')} />
+          {errors.password && <p className="field-error">{errors.password.message}</p>}
         </div>
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="password" className="sr-only">Nieuw wachtwoord</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  id="password"
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Nieuw wachtwoord"
-                  className="appearance-none rounded-md relative block w-full px-10 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  {...register('password')}
-                />
-              </div>
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword" className="sr-only">Bevestig wachtwoord</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  id="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Bevestig wachtwoord"
-                  className="appearance-none rounded-md relative block w-full px-10 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  {...register('confirmPassword')}
-                />
-              </div>
-              {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Wachtwoord opslaan'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div>
+          <label htmlFor="confirmPassword" className="label">Herhaal wachtwoord</label>
+          <PasswordField id="confirmPassword" autoComplete="new-password" placeholder="Nog een keer" aria-invalid={!!errors.confirmPassword} {...register('confirmPassword')} />
+          {errors.confirmPassword && <p className="field-error">{errors.confirmPassword.message}</p>}
+        </div>
+        <button type="submit" disabled={isSubmitting} className="btn btn-primary w-full">
+          {isSubmitting && <Loader2 className="size-4 animate-spin" />}
+          Wachtwoord opslaan
+        </button>
+      </form>
+    </AuthShell>
   )
 }

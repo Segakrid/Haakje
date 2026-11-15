@@ -1,39 +1,54 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { FishSpecies, BaitType } from '@/types/database'
 import { getFishSpecies, getBaitTypes } from '@/lib/api'
 
+interface ReferenceData {
+  fishSpecies: FishSpecies[]
+  baitTypes: BaitType[]
+}
+
+// Vissoorten en aassoorten veranderen zelden: één keer ophalen per sessie volstaat.
+let cached: ReferenceData | null = null
+let pending: Promise<ReferenceData> | null = null
+
+const load = (): Promise<ReferenceData> => {
+  if (!pending) {
+    pending = Promise.all([getFishSpecies(), getBaitTypes()])
+      .then(([fishSpecies, baitTypes]) => {
+        cached = { fishSpecies, baitTypes }
+        return cached
+      })
+      .catch((err) => {
+        pending = null
+        throw err
+      })
+  }
+  return pending
+}
+
 export const useReferenceData = () => {
-  const [fishSpecies, setFishSpecies] = useState<FishSpecies[]>([])
-  const [baitTypes, setBaitTypes] = useState<BaitType[]>([])
-  const [loading, setLoading] = useState(false)
+  const [data, setData] = useState<ReferenceData | null>(cached)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchReferenceData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [species, baits] = await Promise.all([
-        getFishSpecies(),
-        getBaitTypes(),
-      ])
-      setFishSpecies(species)
-      setBaitTypes(baits)
-    } catch (err) {
-      setError('Failed to fetch reference data')
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    if (cached) return
+    let active = true
+    load()
+      .then((result) => {
+        if (active) setData(result)
+      })
+      .catch(() => {
+        if (active) setError('Vissoorten en aassoorten konden niet worden geladen.')
+      })
+    return () => {
+      active = false
     }
   }, [])
 
-  useEffect(() => {
-    fetchReferenceData()
-  }, [fetchReferenceData])
-
   return {
-    fishSpecies,
-    baitTypes,
-    loading,
+    fishSpecies: data?.fishSpecies ?? [],
+    baitTypes: data?.baitTypes ?? [],
+    loading: !data && !error,
     error,
-    fetchReferenceData,
   }
 }

@@ -1,119 +1,117 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Search, FishingRod as FishingRodIcon, MoreVertical, Trash2, Edit, ArrowLeft } from 'lucide-react'
+import { FishingRod as FishingRodIcon, Plus, Search } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useFishingRods } from '@/hooks/useFishingRods'
+import { useCatches } from '@/hooks/useCatches'
+import { useToast } from '@/providers/ToastProvider'
+import { FishingRod } from '@/types/database'
+import { pluralize } from '@/lib/utils'
 import { AuthGuard } from '@/components/AuthGuard'
 import { RodCard } from '@/components/RodCard'
+import { ConfirmDialog } from '@/components/ui/Dialog'
+import { CardGridSkeleton, EmptyState, ErrorBanner, PageHeader } from '@/components/ui/Bits'
 
 export default function RodsPage() {
   const { user } = useAuth()
-  const { rods, loading, error, fetchRods, removeRod } = useFishingRods(user?.id || null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const { rods, loading, error, refresh, removeRod } = useFishingRods(user?.id || null)
+  const { catches } = useCatches(user?.id || null)
+  const toast = useToast()
+  const [query, setQuery] = useState('')
+  const [pendingDelete, setPendingDelete] = useState<FishingRod | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
-  // Filter rods based on search query
-  const filteredRods = rods.filter(rod => {
-    const query = searchQuery.toLowerCase()
-    return (
-      rod.name.toLowerCase().includes(query) ||
-      rod.brand.toLowerCase().includes(query) ||
-      rod.model.toLowerCase().includes(query) ||
-      (rod.description || '').toLowerCase().includes(query)
+  const catchCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const c of catches) {
+      if (c.fishing_rod_id) counts.set(c.fishing_rod_id, (counts.get(c.fishing_rod_id) || 0) + 1)
+    }
+    return counts
+  }, [catches])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return rods
+    return rods.filter((rod) =>
+      [rod.name, rod.brand, rod.model, rod.material, rod.description].some((v) => v?.toLowerCase().includes(q))
     )
-  })
+  }, [rods, query])
 
-  const handleDelete = async (id: string) => {
-    const confirmed = confirm('Weet je zeker dat je deze hengel wilt verwijderen?')
-    if (confirmed) {
-      await removeRod(id)
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+    setDeleting(true)
+    try {
+      await removeRod(pendingDelete.id)
+      toast.success('Hengel verwijderd')
+      setPendingDelete(null)
+    } catch {
+      toast.error('Verwijderen is mislukt. Probeer het opnieuw.')
+    } finally {
+      setDeleting(false)
     }
   }
 
   return (
     <AuthGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-800">Mijn Hengels</h1>
-            <p className="text-gray-600 mt-1">
-              {filteredRods.length} hengel(s) gevonden
-            </p>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Zoeken..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            
-            <Link
-              href="/rods/new"
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md flex items-center gap-2 transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Nieuwe hengel</span>
+      <div className="page space-y-6">
+        <PageHeader
+          eyebrow="Materiaal"
+          title="Mijn hengels"
+          subtitle={loading ? 'Hengels laden…' : pluralize(rods.length, 'hengel', 'hengels') + ' in je foedraal'}
+          actions={
+            <Link href="/rods/new" className="btn btn-primary">
+              <Plus className="size-4" />
+              Nieuwe hengel
             </Link>
-          </div>
-        </div>
+          }
+        />
 
-        {/* Error */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md">
-            {error}
+        {error && <ErrorBanner message={error} onRetry={refresh} />}
+
+        {rods.length > 3 && (
+          <div className="relative max-w-sm">
+            <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted" />
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Zoek op naam, merk of model" aria-label="Hengels zoeken" className="input pl-10" />
           </div>
         )}
 
-        {/* Loading */}
         {loading && rods.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Hengels laden...</p>
-          </div>
-        ) : null}
-
-        {/* Empty State */}
-        {!loading && filteredRods.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FishingRodIcon className="w-12 h-12 text-gray-400" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">Geen hengels gevonden</h3>
-            <p className="text-gray-600 mb-4">
-              {searchQuery
-                ? 'Geen hengels voldoen aan je zoekopdracht'
-                : 'Je hebt nog geen hengels geregistreerd'}
-            </p>
-            <Link
-              href="/rods/new"
-              className="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              Voeg je eerste hengel toe
-            </Link>
-          </div>
-        ) : null}
-
-        {/* Rods Grid */}
-        {!loading && filteredRods.length > 0 && (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredRods.map((rod) => (
-              <RodCard
-                key={rod.id}
-                rod={rod}
-                onDelete={() => handleDelete(rod.id)}
-              />
+          <CardGridSkeleton count={3} />
+        ) : rods.length === 0 && !error ? (
+          <EmptyState
+            art={<span className="water inline-flex size-20 items-center justify-center rounded-3xl"><FishingRodIcon className="size-10" /></span>}
+            title="Je foedraal is nog leeg"
+            description="Voeg je hengels toe en koppel ze aan vangsten. Zo zie je welke hengel het vaakst krom staat."
+            action={<Link href="/rods/new" className="btn btn-primary"><Plus className="size-4" />Voeg je eerste hengel toe</Link>}
+          />
+        ) : filtered.length === 0 ? (
+          <p className="card px-6 py-10 text-center text-muted">Geen hengels gevonden voor “{query}”.</p>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((rod, i) => (
+              <RodCard key={rod.id} rod={rod} catchCount={catchCounts.get(rod.id) || 0} onDelete={setPendingDelete} delay={Math.min(i, 8) * 50} />
             ))}
           </div>
         )}
+
+        <ConfirmDialog
+          open={!!pendingDelete}
+          onClose={() => setPendingDelete(null)}
+          onConfirm={confirmDelete}
+          busy={deleting}
+          title="Hengel verwijderen?"
+          description={
+            pendingDelete
+              ? `“${pendingDelete.name}” wordt verwijderd.${
+                  (catchCounts.get(pendingDelete.id) || 0) > 0
+                    ? ` Je ${pluralize(catchCounts.get(pendingDelete.id) || 0, 'vangst', 'vangsten')} met deze hengel ${(catchCounts.get(pendingDelete.id) || 0) === 1 ? 'blijft' : 'blijven'} bewaard, maar zonder hengel.`
+                    : ''
+                }`
+              : ''
+          }
+        />
       </div>
     </AuthGuard>
   )

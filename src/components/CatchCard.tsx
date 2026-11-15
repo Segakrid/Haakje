@@ -1,151 +1,135 @@
 'use client'
 
-import { useState } from 'react'
+/* eslint-disable @next/next/no-img-element -- foto's komen uit Supabase Storage; next/image vereist daar extra hostconfiguratie voor */
+import { useCallback, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Fish, MapPin, Calendar, Weight, Ruler, MoreVertical, Trash2, Edit, Image as ImageIcon } from 'lucide-react'
+import { Images, MapPin, MoreVertical, Pencil, Ruler, Trash2, Trophy, Weight } from 'lucide-react'
 import { Catch } from '@/types/database'
-import { formatDate, formatWeight, formatLength, getSpeciesName, getBaitName, getRodName, truncate } from '@/lib/utils'
-import { deleteCatch } from '@/lib/api'
-import { useAuth } from '@/hooks/useAuth'
+import { formatDateShort, formatLength, formatWeight, getSpeciesName } from '@/lib/utils'
+import { CatchPlaceholder } from '@/components/FishArt'
+import { useDismiss } from '@/hooks/useDismiss'
 
 interface CatchCardProps {
   catchItem: Catch
-  onDelete: () => void
+  isRecord?: boolean
+  onDelete?: (catchItem: Catch) => void
+  /** Vertraging voor de binnenkomst-animatie (ms). */
+  delay?: number
 }
 
-export const CatchCard = ({ catchItem, onDelete }: CatchCardProps) => {
+export const CatchCard = ({ catchItem, isRecord = false, onDelete, delay = 0 }: CatchCardProps) => {
   const [showMenu, setShowMenu] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const { user } = useAuth()
-
-  const handleDelete = async () => {
-    if (!user?.id) return
-    
-    setDeleting(true)
-    try {
-      await deleteCatch(catchItem.id)
-      onDelete()
-    } catch (err) {
-      console.error('Failed to delete catch:', err)
-    } finally {
-      setDeleting(false)
-      setShowMenu(false)
-    }
-  }
+  const menuRef = useRef<HTMLDivElement>(null)
+  useDismiss(menuRef, showMenu, useCallback(() => setShowMenu(false), []))
+  const species = getSpeciesName(catchItem)
+  const cover = catchItem.images[0]
 
   return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-      {/* Image */}
-      {catchItem.images && catchItem.images.length > 0 ? (
-        <div className="relative h-48 bg-gray-100">
+    <article
+      className={`group card relative animate-rise transition duration-300 hover:-translate-y-1 hover:shadow-lift ${showMenu ? 'z-20' : ''}`}
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="relative aspect-[4/3] overflow-hidden rounded-t-[15px] bg-surface-2">
+        {cover ? (
           <img
-            src={catchItem.images[0]}
-            alt="Vangst"
-            className="w-full h-full object-cover"
+            src={cover}
+            alt={`${species}, gevangen bij ${catchItem.location}`}
+            loading="lazy"
+            className="size-full object-cover transition duration-500 group-hover:scale-105"
           />
+        ) : (
+          <CatchPlaceholder name={species} className="size-full transition duration-500 group-hover:scale-105" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-deep/85 via-deep/10 to-transparent" />
+
+        <div className="absolute top-3 left-3 flex gap-2">
+          {isRecord && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#f6c544] px-2.5 py-1 text-[11px] font-bold tracking-wide text-[#3d2a00] uppercase shadow">
+              <Trophy className="size-3" />
+              Record
+            </span>
+          )}
           {catchItem.images.length > 1 && (
-            <div className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-              +{catchItem.images.length - 1} meer
-            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-deep/60 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
+              <Images className="size-3" />
+              {catchItem.images.length}
+            </span>
           )}
         </div>
-      ) : (
-        <div className="h-48 bg-gray-100 flex items-center justify-center">
-          <Fish className="w-16 h-16 text-gray-400" />
-        </div>
-      )}
 
-      {/* Content */}
-      <div className="p-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800">
-              {getSpeciesName(catchItem)}
-            </h3>
-            <p className="text-sm text-gray-500">{formatDate(catchItem.caught_at)}</p>
+        <div className="absolute inset-x-0 bottom-0 p-4">
+          <p className="text-xs font-medium text-white/75">{formatDateShort(catchItem.caught_at)}</p>
+          <h3 className="display text-2xl leading-tight text-white">
+            {/* De link bestrijkt de hele kaart; het menu ligt er met z-index boven. */}
+            <Link href={`/catches/${catchItem.id}`} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">
+              {species}
+            </Link>
+          </h3>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 p-4">
+        <div className="min-w-0 space-y-2">
+          <p className="flex items-center gap-1.5 truncate text-sm text-muted">
+            <MapPin className="size-4 shrink-0 text-brand" />
+            <span className="truncate">{catchItem.location}</span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {catchItem.weight_kg !== null && (
+              <span className="chip tnum text-ink">
+                <Weight className="size-3.5 text-muted" />
+                {formatWeight(catchItem.weight_kg)}
+              </span>
+            )}
+            {catchItem.length_cm !== null && (
+              <span className="chip tnum text-ink">
+                <Ruler className="size-3.5 text-muted" />
+                {formatLength(catchItem.length_cm)}
+              </span>
+            )}
+            {catchItem.bait_type && <span className="chip">{catchItem.bait_type.name}</span>}
           </div>
-          
-          {/* Menu */}
-          <div className="relative">
+        </div>
+
+        {onDelete && (
+          <div ref={menuRef} className="relative z-10 self-start">
             <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"
+              onClick={() => setShowMenu((v) => !v)}
+              className="icon-btn -mr-1.5"
+              aria-label={`Acties voor ${species}`}
+              aria-haspopup="menu"
+              aria-expanded={showMenu}
             >
-              <MoreVertical className="w-5 h-5" />
+              <MoreVertical className="size-5" />
             </button>
-            
             {showMenu && (
               <>
-                <div 
-                  className="fixed inset-0 z-10" 
-                  onClick={() => setShowMenu(false)}
-                />
-                <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-md shadow-lg z-20 py-1">
+                <div role="menu" className="card absolute right-0 bottom-full z-20 mb-1 w-44 animate-pop p-1.5 shadow-lift">
                   <Link
+                    role="menuitem"
                     href={`/catches/${catchItem.id}/edit`}
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                    onClick={() => setShowMenu(false)}
+                    className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-ink hover:bg-surface-2"
                   >
-                    <Edit className="w-4 h-4" />
+                    <Pencil className="size-4 text-muted" />
                     Bewerken
                   </Link>
                   <button
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left flex items-center gap-2 disabled:opacity-50"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowMenu(false)
+                      onDelete(catchItem)
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-danger hover:bg-danger-soft"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    {deleting ? 'Verwijderen...' : 'Verwijderen'}
+                    <Trash2 className="size-4" />
+                    Verwijderen
                   </button>
                 </div>
               </>
             )}
           </div>
-        </div>
-
-        {/* Details */}
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <MapPin className="w-4 h-4 text-blue-500" />
-            <span>{truncate(catchItem.location, 30)}</span>
-          </div>
-          
-          {catchItem.weight_kg && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Weight className="w-4 h-4 text-blue-500" />
-              <span>{formatWeight(catchItem.weight_kg)}</span>
-            </div>
-          )}
-          
-          {catchItem.length_cm && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Ruler className="w-4 h-4 text-blue-500" />
-              <span>{formatLength(catchItem.length_cm)}</span>
-            </div>
-          )}
-          
-          {catchItem.fishing_rod && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <div className="w-4 h-4 bg-gray-300 rounded"></div>
-              <span>{truncate(getRodName(catchItem), 25)}</span>
-            </div>
-          )}
-          
-          {catchItem.bait_type && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <div className="w-4 h-4 bg-yellow-300 rounded"></div>
-              <span>{truncate(getBaitName(catchItem), 25)}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Notes */}
-        {catchItem.notes && (
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <p className="text-sm text-gray-600 italic">{truncate(catchItem.notes, 100)}</p>
-          </div>
         )}
       </div>
-    </div>
+    </article>
   )
 }

@@ -1,98 +1,98 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import Link from 'next/link'
-import { FishingRod as FishingRodIcon, MoreVertical, Trash2, Edit } from 'lucide-react'
+import { FishingRod as FishingRodIcon, MoreVertical, Pencil, Trash2 } from 'lucide-react'
 import { FishingRod } from '@/types/database'
-import { truncate } from '@/lib/utils'
+import { pluralize } from '@/lib/utils'
+import { useDismiss } from '@/hooks/useDismiss'
 
 interface RodCardProps {
   rod: FishingRod
-  onDelete: () => void
+  catchCount: number
+  onDelete: (rod: FishingRod) => void
+  delay?: number
 }
 
-export const RodCard = ({ rod, onDelete }: RodCardProps) => {
+export const RodCard = ({ rod, catchCount, onDelete, delay = 0 }: RodCardProps) => {
   const [showMenu, setShowMenu] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  useDismiss(menuRef, showMenu, useCallback(() => setShowMenu(false), []))
+  const specs = [
+    rod.length ? { label: 'Lengte', value: `${String(rod.length).replace('.', ',')} m` } : null,
+    rod.weight ? { label: 'Gewicht', value: `${String(rod.weight).replace('.', ',')} kg` } : null,
+    rod.material ? { label: 'Materiaal', value: rod.material } : null,
+  ].filter((s): s is { label: string; value: string } => !!s)
 
   return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-      {/* Header */}
-      <div className="bg-gray-50 p-4 border-b border-gray-200">
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800">{rod.name}</h3>
-            <p className="text-sm text-gray-500">{rod.brand} {rod.model}</p>
-          </div>
-          
-          {/* Menu */}
-          <div className="relative">
-            <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"
-            >
-              <MoreVertical className="w-5 h-5" />
-            </button>
-            
-            {showMenu && (
-              <>
-                <div 
-                  className="fixed inset-0 z-10" 
-                  onClick={() => setShowMenu(false)}
-                />
-                <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-md shadow-lg z-20 py-1">
-                  <Link
-                    href={`/rods/${rod.id}/edit`}
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                    onClick={() => setShowMenu(false)}
-                  >
-                    <Edit className="w-4 h-4" />
-                    Bewerken
-                  </Link>
-                  <button
-                    onClick={onDelete}
-                    className="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left flex items-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Verwijderen
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+    <article className={`card relative animate-rise p-5 transition duration-300 hover:-translate-y-1 hover:shadow-lift ${showMenu ? 'z-20' : ''}`} style={{ animationDelay: `${delay}ms` }}>
+      <div className="flex items-start gap-4">
+        <span className="water inline-flex size-12 shrink-0 items-center justify-center rounded-2xl">
+          <FishingRodIcon className="size-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="display truncate text-xl text-ink">{rod.name}</h3>
+          <p className="truncate text-sm text-muted">
+            {rod.brand} {rod.model}
+          </p>
+        </div>
+        <div ref={menuRef} className="relative">
+          <button
+            onClick={() => setShowMenu((v) => !v)}
+            className="icon-btn -mt-1 -mr-2"
+            aria-label={`Acties voor ${rod.name}`}
+            aria-haspopup="menu"
+            aria-expanded={showMenu}
+          >
+            <MoreVertical className="size-5" />
+          </button>
+          {showMenu && (
+            <>
+              <div role="menu" className="card absolute top-full right-0 z-20 mt-1 w-44 animate-pop p-1.5 shadow-lift">
+                <Link
+                  role="menuitem"
+                  href={`/rods/${rod.id}/edit`}
+                  className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-ink hover:bg-surface-2"
+                >
+                  <Pencil className="size-4 text-muted" />
+                  Bewerken
+                </Link>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setShowMenu(false)
+                    onDelete(rod)
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-danger hover:bg-danger-soft"
+                >
+                  <Trash2 className="size-4" />
+                  Verwijderen
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Content */}
-      <div className="p-4">
-        <div className="space-y-3">
-          {rod.length && (
-            <div className="flex justify-between">
-              <span className="text-gray-500 text-sm">Lengte</span>
-              <span className="font-medium">{rod.length} m</span>
+      {specs.length > 0 && (
+        <dl className="mt-5 grid grid-cols-3 gap-2">
+          {specs.map((spec) => (
+            <div key={spec.label} className="rounded-xl bg-surface-2 px-3 py-2">
+              <dt className="text-[11px] font-medium tracking-wide text-muted uppercase">{spec.label}</dt>
+              <dd className="tnum truncate text-sm font-semibold text-ink">{spec.value}</dd>
             </div>
-          )}
-          
-          {rod.weight && (
-            <div className="flex justify-between">
-              <span className="text-gray-500 text-sm">Gewicht</span>
-              <span className="font-medium">{rod.weight} kg</span>
-            </div>
-          )}
-          
-          {rod.material && (
-            <div className="flex justify-between">
-              <span className="text-gray-500 text-sm">Materiaal</span>
-              <span className="font-medium">{rod.material}</span>
-            </div>
-          )}
-          
-          {rod.description && (
-            <div className="pt-3 border-t border-gray-100">
-              <p className="text-sm text-gray-600">{truncate(rod.description, 100)}</p>
-            </div>
-          )}
-        </div>
+          ))}
+        </dl>
+      )}
+
+      {rod.description && <p className="mt-4 line-clamp-2 text-sm text-muted">{rod.description}</p>}
+
+      <div className="mt-4 flex items-center justify-between border-t border-line pt-3.5 text-sm">
+        <span className="text-muted">Gevangen met deze hengel</span>
+        <span className={`tnum font-semibold ${catchCount > 0 ? 'text-brand' : 'text-muted'}`}>
+          {pluralize(catchCount, 'vangst', 'vangsten')}
+        </span>
       </div>
-    </div>
+    </article>
   )
 }

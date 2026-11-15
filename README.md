@@ -7,6 +7,16 @@ statistieken over je prestaties.
 Gebouwd met **Next.js 16** (App Router), **React 19**, **Tailwind CSS 4** en
 **Supabase** (auth, Postgres database en storage).
 
+## Wat kan het?
+
+- **Dashboard** met je laatste vangsten, topstek en je zwaarste vis als trofee
+- **Vangsten** vastleggen met foto's (worden in de browser verkleind vóór upload),
+  GPS-positie, datum/tijd, aas en hengel; zoeken, sorteren en filteren
+- **Persoonlijke records** per vissoort, met een record-label op de kaart
+- **Statistieken**: vangsten per maand/dag, bijttijden, beste aas, topstekken
+- **Hengels** beheren, inclusief het aantal vangsten per hengel
+- Licht en donker thema, mobiele tabbalk en installeerbaar als app (web manifest)
+
 ## Lokaal ontwikkelen
 
 ### 1. Vereisten
@@ -68,8 +78,10 @@ de app online te zetten met Vercel en Supabase.
 ```
 src/
   app/          App Router pagina's (catches, rods, stats, login, register)
-  components/   Herbruikbare UI componenten + auth guards
-  hooks/        Data hooks (useAuth, useCatches, useFishingRods, ...)
+  components/   App-shell, kaarten, formulieren, grafieken + auth guards
+  components/ui Kleine bouwstenen (dialoog, lege staat, tegels, loader)
+  providers/    Gedeelde auth-status en toasts
+  hooks/        Data hooks met cache (useAuth, useCatches, useFishingRods, ...)
   lib/          Supabase client, API laag, validaties (zod), utils
   types/        TypeScript types voor de database
 supabase/
