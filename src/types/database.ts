@@ -72,6 +72,8 @@ export interface CatchInput {
   longitude: number | null
   notes: string | null
   images: File[] | null
+  /** ISO-tijdstip waarop de vis gevangen is. */
+  caught_at: string
 }
 
 export interface FishingRodInput {

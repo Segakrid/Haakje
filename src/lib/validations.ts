@@ -2,9 +2,9 @@ import { z } from 'zod'
 
 // Fishing Rod validation
 export const fishingRodSchema = z.object({
-  name: z.string().min(1, 'Naam is verplicht'),
-  brand: z.string().min(1, 'Merk is verplicht'),
-  model: z.string().min(1, 'Model is verplicht'),
+  name: z.string().trim().min(1, 'Naam is verplicht'),
+  brand: z.string().trim().min(1, 'Merk is verplicht'),
+  model: z.string().trim().min(1, 'Model is verplicht'),
   length: z.number().min(0.1, 'Lengte moet minimaal 0.1m zijn').nullable().optional(),
   weight: z.number().min(0.01, 'Gewicht moet minimaal 0.01kg zijn').nullable().optional(),
   material: z.string().nullable().optional(),
@@ -20,33 +20,50 @@ export const catchSchema = z.object({
   fishing_rod_id: z.string().nullable().optional(),
   weight_kg: z.number().min(0.01, 'Gewicht moet minimaal 0.01kg zijn').nullable().optional(),
   length_cm: z.number().min(1, 'Lengte moet minimaal 1cm zijn').nullable().optional(),
-  location: z.string().min(1, 'Locatie is verplicht'),
+  location: z.string().trim().min(1, 'Locatie is verplicht').max(120, 'Maximaal 120 tekens'),
   latitude: z.number().nullable().optional(),
   longitude: z.number().nullable().optional(),
   notes: z.string().nullable().optional(),
-  images: z.array(z.instanceof(File)).nullable().optional(),
+  caught_at: z
+    .string()
+    .min(1, 'Datum en tijd zijn verplicht')
+    .refine((value) => !Number.isNaN(new Date(value).getTime()), 'Ongeldige datum')
+    .refine((value) => new Date(value).getTime() <= Date.now() + 5 * 60 * 1000, 'Een vangst kan niet in de toekomst liggen'),
 })
+
+// Voor react-hook-form: een leeg getalveld is "niet ingevuld" (null), geen NaN.
+export const optionalNumber = (value: unknown): number | null => {
+  if (value === '' || value === null || value === undefined) return null
+  const parsed = typeof value === 'number' ? value : Number(String(value).replace(',', '.'))
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+export const optionalText = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
 
 export type CatchFormData = z.infer<typeof catchSchema>
 
 // User profile validation
 export const profileSchema = z.object({
   name: z.string().min(1, 'Naam is verplicht'),
-  email: z.string().email('Ongeldig emailadres'),
+  email: z.string().email('Ongeldig e-mailadres'),
 })
 
 export type ProfileFormData = z.infer<typeof profileSchema>
 
 // Auth validation
 export const loginSchema = z.object({
-  email: z.string().email('Ongeldig emailadres'),
+  email: z.string().email('Ongeldig e-mailadres'),
   password: z.string().min(6, 'Wachtwoord moet minimaal 6 tekens zijn'),
 })
 
 export type LoginFormData = z.infer<typeof loginSchema>
 
 export const registerSchema = z.object({
-  email: z.string().email('Ongeldig emailadres'),
+  email: z.string().email('Ongeldig e-mailadres'),
   password: z.string().min(6, 'Wachtwoord moet minimaal 6 tekens zijn'),
   name: z.string().min(1, 'Naam is verplicht'),
 })
@@ -54,7 +71,7 @@ export const registerSchema = z.object({
 export type RegisterFormData = z.infer<typeof registerSchema>
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().email('Ongeldig emailadres'),
+  email: z.string().email('Ongeldig e-mailadres'),
 })
 
 export type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>
